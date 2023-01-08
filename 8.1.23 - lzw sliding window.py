@@ -8,17 +8,45 @@ def write_compressed_data(result: [str], code_size: int):
     return bytes(output, "utf-8")
 
 
-def convert_int_to_bstring(number: int, code_size: int) -> str:
-    return str((bin(number))[2:]).zfill(code_size)
+def convert_int_to_bits(number, code_size):
+    return bytes((bin(5)[2:]).zfill(code_size), 'utf-8')
 
 
-def encode(data: bytes):
+def initialize_code_table(color_table_size):
+    table_size = int(math.pow(color_table_sizes, 2))
+    table = {i: i for i in range(table_size)}
+    table[table_size] = table_size
+    table_size += 1
+    table[table_size] = table_size
+    table_size += 1
+    return table, table_size
 
+
+def update_code_size(table_size, code_size):
+    if table_size == math.pow(2, code_size) - 1:
+        code_size += 1
+
+def encode(data: bytes, color_table_size, code_size):
+    """
+    the table code look like this:
+    ______|_____
+      #0  |  0
+      #1  |  1
+      #2  |  2
+      #3  |  3
+    """
     string_data = data.decode()
-    table = {"0": "0", "1": "1"}
-    prev = ""
-    output = []
-    table_size = 2
+    table, table_size = initialize_code_table(color_table_size)
+    update_code_size(table_size, code_size)
+
+    num_of_bits = int(math.pow(code_size, 2) - 1)
+    clear_code = table[-2]
+    end_of_information_code = table[-1]
+
+    compress_data = b''
+    compress_data += convert_int_to_bits(clear_code, code_size)
+    prev = None
+
     for bit in string_data:
         last_and_current = prev + bit
         if last_and_current in table:
