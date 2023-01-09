@@ -1,5 +1,7 @@
 import math
 
+from bitstring import ConstBitStream
+
 
 def write_compressed_data(result: [str], code_size: int):
     output = ""
@@ -9,22 +11,23 @@ def write_compressed_data(result: [str], code_size: int):
 
 
 def convert_int_to_bits(number, code_size):
-    return bytes((bin(5)[2:]).zfill(code_size), 'utf-8')
+    return bytes((bin(number)[2:]).zfill(code_size), 'utf-8')
 
 
 def initialize_code_table(color_table_size):
-    table_size = int(math.pow(color_table_sizes, 2))
-    table = {i: i for i in range(table_size)}
+    table_size = int(math.pow(color_table_size, 2))
+    table = {str(i): i for i in range(table_size)}
     table[table_size] = table_size
     table_size += 1
     table[table_size] = table_size
     table_size += 1
-    return table, table_size
+    return table
 
 
 def update_code_size(table_size, code_size):
-    if table_size == math.pow(2, code_size) - 1:
+    if table_size == int(math.pow(2, code_size) - 1):
         code_size += 1
+
 
 def encode(data: bytes, color_table_size, code_size):
     """
@@ -35,31 +38,39 @@ def encode(data: bytes, color_table_size, code_size):
       #2  |  2
       #3  |  3
     """
-    string_data = data.decode()
-    table, table_size = initialize_code_table(color_table_size)
-    update_code_size(table_size, code_size)
+    stream = ConstBitStream(data)
 
-    num_of_bits = int(math.pow(code_size, 2) - 1)
+    table = initialize_code_table(color_table_size)
+    update_code_size(len(table), code_size)
+
+    # num_of_bits = int(math.pow(code_size, 2) - 1)
     clear_code = table[-2]
-    end_of_information_code = table[-1]
-
     compress_data = b''
     compress_data += convert_int_to_bits(clear_code, code_size)
-    prev = None
 
-    for bit in string_data:
-        last_and_current = prev + bit
-        if last_and_current in table:
-            prev = last_and_current
+    pos = stream.length - code_size
+    stream.pos = pos
+    curr_el = stream.read('bin' + code_size)
+    pos = pos - code_size
+
+    while stream.length > 0:
+
+        stream.pos = pos
+        next_el = stream.read('bin' + code_size)
+        current_and_next = curr_el + "," + str(int(next_el[2:], 2))
+
+        if current_and_next in table:
+            curr_el = current_and_next
         else:
-            output.append(table[prev])
-            table[last_and_current] = convert_int_to_bstring(table_size, 0)
-            table_size += 1
-            prev = bit
-    output.append(table[prev])
+            update_code_size(len(table), code_size)
+            table[current_and_next] = len(table)
+            compress_data += convert_int_to_bits(table[curr_el], code_size)
+            curr_el = next_el
+        pos = pos - code_size
 
-    code_size = math.ceil(math.log(table_size, 2))
-    return write_compressed_data(output, code_size), code_size
+    update_code_size(len(table), code_size)
+    compress_data += convert_int_to_bits(table[curr_el], code_size)
+    return compress_data
 
 
 def decode(data: bytes, code_size: int):
