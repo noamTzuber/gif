@@ -14,121 +14,246 @@ def convert_int_to_bits(number, code_size):
     return bytes((bin(number)[2:]).zfill(code_size), 'utf-8')
 
 
-def initialize_code_table(color_table_size):
+def initialize_code_table(color_table_size, is_decode):
+    """
+    creating the base table for the known value
+    :param color_table_size:
+    :return: table
+    """
     table_size = color_table_size
     table = {str(i): i for i in range(color_table_size)}
     table[str(table_size)] = table_size
     table_size += 1
     table[str(table_size)] = table_size
     table_size += 1
+
+    if is_decode:
+        table = {val: key for key, val in table.items()}
+
     return table
 
 
-def update_writing_size(table_size, writing_size):
-    if table_size == int(math.pow(2, writing_size)) + 1:
-        return writing_size + 1
-    return writing_size
+def update_code_size(table_size, code_size):
+    """
+    check if we need to increase the writing window if the table size +1 is presenting binary more than the
+    current writing window size
+    :param table_size:
+    :param writing_size:
+    :return: writing_size:
+    """
+    if table_size == int(math.pow(2, code_size)) + 1:
+        return code_size + 1
+    return code_size
+
 
 def flip_data(compress_data):
-    ordered_data = b''
-    length = len(compress_data)/8
-    for i in range(int(length)):
-        ordered_data += compress_data[-8:]
-        compress_data = compress_data[:-8]
-    return ordered_data
-
-def encode(data: bytes, color_table_size):
     """
+    flip the data doing reverse to the compressed data - ךooking at each element of size 8 bits
+
+    :param compress_data:
+    :return: fliped_data
+    """
+    fliped_data = b''
+    length = len(compress_data) / 8
+    for i in range(int(length)):
+        fliped_data += compress_data[-8:]
+        compress_data = compress_data[:-8]
+    return fliped_data
+
+
+def get_encode_element(stream, reading_size):
+    """
+    the next element represent in as string number
+    :param stream:
+    :param reading_size:
+    :return: element
+    """
+    element = stream.read('bin' + str(reading_size))
+    return str(int(element, 2))
+
+
+def fill_zero_bytes(compress_data):
+    """
+    fill the data with zero in start that will divide by 8 - for hexa presenting
+    :param compress_data:
+    :return: compress_data
+    """
+    if zero_fill := len(compress_data) % 8:
+        compress_data = convert_int_to_bits(0, zero_fill) + compress_data
+    return compress_data
+
+
+def encode(uncompressed_data, color_table_size):
+    """
+    using lzw algorithm for compress data ang gif images
     the table code look like this:
     ______|_____
       #0  |  0
       #1  |  1
       #2  |  2
       #3  |  3
+
+    :param uncompressed_data:
+    :param color_table_size:
+    :return: compress_data:
     """
-    # line 1 = 001001001001001010010010010010001001001001001010010010010010001001001001001010010010010010001001001000000000000010010010001001001000000000000010010010010010010000000000000001001001010010010000000000000001001001010010010010010001001001001001010010010010010001001001001001010010010010010001001001001001
+    # change data to be ConstBitStream object for reading
+    stream = ConstBitStream(uncompressed_data)
 
-    stream = ConstBitStream('0x24929248924A492249292489200092248002492400049490001252491249492449252491249')
+    # the window size riding is the log of the size table plus 1
     reading_size = math.ceil(math.log(color_table_size + 1)) + 1
-    writing_size = reading_size
-    table = initialize_code_table(color_table_size)
-    update_writing_size(len(table), writing_size)
 
-    clear_code = table[str(len(table)-2)]
-    end_of_information_code = table[str(len(table)-1)]
+    #  at start as reading later this will change
+    writing_size = reading_size
+
+    table = initialize_code_table(color_table_size, False)
+    # if the next item in the table will need to be writen with more bit change now the writing size
+    writing_size = update_code_size(len(table), writing_size)
+
+    # add the start of reading
+    clear_code = table[str(len(table) - 2)]
+    #  add the enf of reading
+    end_of_information_code = table[str(len(table) - 1)]
 
     compress_data = b''
+    #  add clear code
     compress_data += convert_int_to_bits(clear_code, reading_size)
 
-    # pos = stream.length - reading_size + 1
-    # stream.pos = pos
     length = stream.length
-    curr_el = stream.read('bin' + str(reading_size))
-    curr_el = str(int(curr_el, 2))
+    # the first item
+    curr_el = get_encode_element(stream, reading_size)
 
-    # pos = pos - reading_size
-    print(length)
-    while stream.pos != (length):
-        print(stream.pos)
-        # stream.pos = pos
-        next_el = stream.read('bin' + str(reading_size))
-        next_el = str(int(next_el, 2))
+    while stream.pos != length:
+        # reading the next item
+        next_el = get_encode_element(stream, reading_size)
         current_and_next = next_el + "," + curr_el
 
+        # if it is in the table continue
         if current_and_next in table:
             curr_el = current_and_next
         else:
+            # write the compressed value to the output
             compress_data = convert_int_to_bits(table[curr_el], writing_size) + compress_data
+            # add the new concat to the table
             table[current_and_next] = len(table)
-            writing_size = update_writing_size(len(table), writing_size)
+            # checking if to change the writing size
+            writing_size = update_code_size(len(table), writing_size)
             curr_el = next_el
 
+    # add the last element to the output
     compress_data = convert_int_to_bits(table[curr_el], writing_size) + compress_data
+
+    # add the end to the output - for inform that is the end ot the data
     compress_data = convert_int_to_bits(end_of_information_code, writing_size) + compress_data
-    if zero_fill := len(compress_data) % 8:
-        compress_data = convert_int_to_bits(0, zero_fill) + compress_data
 
-    return_data = flip_data(compress_data)
-
-    return return_data
+    # fill zeros to be present by 8 bits and flip the data
+    x = flip_data(fill_zero_bytes(compress_data))
+    return x
 
 
-def decode(data: bytes, code_size: int):
-    string_data = data.decode()
+def get_decode_element(stream, reading_size, pos):
+    """
+    the next element represent in as string number
+    :param stream:
+    :param reading_size:
+    :return: element
+    """
+    stream.pos = pos
+    element = stream.read('bin' + str(reading_size))
+    return int(element, 2)
 
-    zero_table = "0".zfill(code_size)
-    one_table = "1".zfill(code_size)
 
-    table = {zero_table: "0", one_table: "1"}
+def index_to_binary(element, writing_size):
+    return bytes(''.join([bin(int(val))[2:].zfill(writing_size) for val in element.split(',')]), 'utf-8')
 
-    decompressed_data = ""
-    table_size = 2
-    compressed_data = [string_data[i:i + code_size] for i in range(0, len(string_data), code_size)]
 
-    length = len(compressed_data) - 1
-    for i in range(length):
-        curr_item = table[compressed_data[i]]
+def fill_zero_hexa(hexa_data, binary_data_len):
+    """
+    fill the data with zero in start that will divide by 8 - for hexa presenting
+    :param hexa_data:
+    :return: binary_data_len
+    """
+    while len(hexa_data[2:]) < binary_data_len/4:
+        hexa_data = '0x0' + hexa_data[2:]
+    return hexa_data
 
-        if not (compressed_data[i + 1] in table):
-            table[convert_int_to_bstring(table_size, code_size)] = curr_item + curr_item[0]
+def update_code_size1(table_size, code_size):
+    """
+    check if we need to increase the writing window if the table size +1 is presenting binary more than the
+    current writing window size
+    :param table_size:
+    :param writing_size:
+    :return: writing_size:
+    """
+    if table_size == int(math.pow(2, code_size)):
+        return code_size + 1
+    return code_size
+
+def decode(compressed_data, color_table_size):
+    """
+    using lzw algorithm for compress data ang gif images
+    the table code look like this:
+    _____|______
+      0  |  #0
+      1  |  #1
+      2  |  #2
+      3  |  #3
+
+    :param compressed_data:
+    :param color_table_size:
+    :return: compress_data:
+    """
+    writing_size = math.ceil(math.log(color_table_size + 1)) + 1
+    reading_size = writing_size
+    table = initialize_code_table(color_table_size, True)
+    reading_size = update_code_size1(len(table), reading_size)
+
+    # add the start of reading
+    clear_code = int(table[len(table) - 2])
+
+    #  add the enf of reading
+    end_of_information_code = int(table[(len(table) - 1)])
+
+    compressed_data = flip_data(bytes(bin(int(compressed_data, 16))[2:], 'utf-8'))
+    data_length = len(compressed_data)
+    compressed_data = hex(int(compressed_data, 2))
+    compressed_data = fill_zero_hexa(compressed_data, data_length)
+    stream = ConstBitStream(compressed_data)
+    pos = stream.length - reading_size
+    first_element = get_decode_element(stream, reading_size, pos)
+    pos = pos - reading_size
+
+    if first_element != clear_code:
+        print("the image was corrupted")
+        return -1
+
+    decompressed_data = b''
+    curr_el = get_decode_element(stream, reading_size, pos)
+    pos = pos - reading_size
+
+    decompressed_data += index_to_binary(table[curr_el], writing_size)
+    while True:
+        next_el = get_decode_element(stream, reading_size, pos)
+        if next_el == end_of_information_code:
+            break
+        if next_el in table:
+            decompressed_data += index_to_binary(table[next_el], writing_size)
+            k = table[next_el][0]
         else:
-            next_item = table[compressed_data[i + 1]][0]
-            table[convert_int_to_bstring(table_size, code_size)] = curr_item + next_item
-        table_size += 1
-        decompressed_data += curr_item
-    decompressed_data += table[compressed_data[length]]
-    return bytes(decompressed_data, "utf-8")
+            k = table[curr_el][0]
+            decompressed_data += index_to_binary(table[curr_el] + "," + k, writing_size)
+        table[len(table)] = table[curr_el] + "," + k
+        reading_size = update_code_size1(len(table), reading_size)
+        pos = pos - reading_size
+        curr_el = next_el
 
+    return decompressed_data
 
 if __name__ == '__main__':
     import io
 
     # Open the file in binary mod
-    input_bytes = b'1110101111010000001100000000101001011010100101010001011111111'
-    com_data = encode(input_bytes, 4)
+    input_bytes = '0x24929248924A492249292489200092248002492400049490001252491249492449252491249'
+    print("0x{:x}".format(int(encode(input_bytes, 4), 2)))
 
-    # output_bytes = decode(com_data, c_s)
-    # if output_bytes == input_bytes:
-    #     print("Great you are the best!!!\ninput_bytes = ", input_bytes, "output_bytes = ", output_bytes)
-    # else:
-    #     print("Error!!!!!!!!!!!!!!")
+    print(decode(bytes('0x8c2d99872a1cdc33a00275ec95faa8de608c04914c01','utf-8'), 4))
