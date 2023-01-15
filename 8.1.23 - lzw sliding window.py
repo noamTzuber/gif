@@ -35,7 +35,7 @@ def initialize_code_table(color_table_size, is_decode):
 
 def update_code_size(table_size, code_size):
     """
-    check if we need to increase the writing window if the table size +1 is presenting binary more than the
+    check if we need to increase the writing window if the table size +1 is representing binary more than the
     current writing window size
     :param table_size:
     :param writing_size:
@@ -74,7 +74,7 @@ def get_encode_element(stream, reading_size):
 
 def fill_zero_bytes(compress_data):
     """
-    fill the data with zero in start that will divide by 8 - for hexa presenting
+    fill the data with zero in start that will divide by 8 - for hexa representing
     :param compress_data:
     :return: compress_data
     """
@@ -146,7 +146,7 @@ def encode(uncompressed_data, color_table_size):
     # add the end to the output - for inform that is the end ot the data
     compress_data = convert_int_to_bits(end_of_information_code, writing_size) + compress_data
 
-    # fill zeros to be present by 8 bits and flip the data
+    # fill zeros to be represent by 8 bits and flip the data
     x = flip_data(fill_zero_bytes(compress_data))
     return x
 
@@ -169,7 +169,7 @@ def index_to_binary(element, writing_size):
 
 def fill_zero_hexa(hexa_data, binary_data_len):
     """
-    fill the data with zero in start that will divide by 8 - for hexa presenting
+    fill the data with zero in start that will divide by 8 - for hexa representing
     :param hexa_data:
     :return: binary_data_len
     """
@@ -179,7 +179,7 @@ def fill_zero_hexa(hexa_data, binary_data_len):
 
 def update_code_size1(table_size, code_size):
     """
-    check if we need to increase the writing window if the table size +1 is presenting binary more than the
+    check if we need to increase the writing window if the table size +1 is representing binary more than the
     current writing window size
     :param table_size:
     :param writing_size:
