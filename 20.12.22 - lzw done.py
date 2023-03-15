@@ -64,7 +64,7 @@ def decode(data: bytes, code_size: int):
 if __name__ == '__main__':
     import io
 
-    # Open the file in binary mod
+    # Open the file in binary mode
     input_bytes = b'1110101111010000001100000000101001011010100101010001011111111'
     com_data, c_s = encode(input_bytes)
     print(com_data, c_s)
