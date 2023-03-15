@@ -2,6 +2,9 @@ import math
 
 from bitstring import ConstBitStream
 
+# the example we using here:
+#       https://giflib.sourceforge.net/whatsinagif/bits_and_bytes.html
+#       https://giflib.sourceforge.net/whatsinagif/lzw_image_data.html
 
 def write_compressed_data(result: [str], code_size: int):
     output = ""
@@ -22,11 +25,14 @@ def initialize_code_table(color_table_size, is_decode):
     """
     table_size = color_table_size
     table = {str(i): i for i in range(color_table_size)}
+    # adding the number for clear code
     table[str(table_size)] = table_size
     table_size += 1
+    # adding the number for end_of_information
     table[str(table_size)] = table_size
     table_size += 1
 
+    # in decode we need to flip the table for the opposite process
     if is_decode:
         table = {val: key for key, val in table.items()}
 
@@ -63,7 +69,7 @@ def flip_data(compress_data):
 
 def get_encode_element(stream, reading_size):
     """
-    the next element represent in as string number
+    the next element represent in as string number . the riding size in constant
     :param stream:
     :param reading_size:
     :return: element
@@ -75,7 +81,7 @@ def get_encode_element(stream, reading_size):
 def fill_zero_bytes(compress_data):
     """
     fill the data with zero in start that will divide by 8 - for hexa representing
-    :param compress_data:
+    :param: compress_data:
     :return: compress_data
     """
     if zero_fill := len(compress_data) % 8:
@@ -87,6 +93,8 @@ def encode(uncompressed_data, color_table_size):
     """
     using lzw algorithm for compress data ang gif images
     the table code look like this:
+
+    str   |  int
     ______|_____
       #0  |  0
       #1  |  1
@@ -98,32 +106,41 @@ def encode(uncompressed_data, color_table_size):
     :return: compress_data:
     """
     # change data to be ConstBitStream object for reading
+    # we got  1,1,1,1,1,2,2,.. that represent by '0x2492924.."
     stream = ConstBitStream(uncompressed_data)
 
     # the window size riding is the log of the size table plus 1
+    # color table size +1 => it's for the end_of_information_code and clear_code,
+    # (color table size +1) + 1 => it's for situations that the number isn't pow of two then we need added a bit for
+    # riding the numbers (in our example = 3).
+    # notice the reding size in constant - not change
     reading_size = math.ceil(math.log(color_table_size + 1)) + 1
 
     #  at start as reading later this will change
     writing_size = reading_size
 
     table = initialize_code_table(color_table_size, False)
+
     # if the next item in the table will need to be writen with more bit change now the writing size
+    # because we're adding more indexes to the table, and now we need more bits to represent the numbers
     writing_size = update_code_size(len(table), writing_size)
 
-    # add the start of reading
+    # add the start of reading (in our example = 4)
     clear_code = table[str(len(table) - 2)]
-    #  add the enf of reading
+    #  add the enf of reading (in our example = 5)
     end_of_information_code = table[str(len(table) - 1)]
 
     compress_data = b''
-    #  add clear code
+    #  add clear code according the reading size (in our example = 4)
     compress_data += convert_int_to_bits(clear_code, reading_size)
 
     length = stream.length
+
     # the first item
     curr_el = get_encode_element(stream, reading_size)
 
     while stream.pos != length:
+
         # reading the next item
         next_el = get_encode_element(stream, reading_size)
         current_and_next = next_el + "," + curr_el
@@ -146,7 +163,7 @@ def encode(uncompressed_data, color_table_size):
     # add the end to the output - for inform that is the end ot the data
     compress_data = convert_int_to_bits(end_of_information_code, writing_size) + compress_data
 
-    # fill zeros to be represent by 8 bits and flip the data
+    # fill zeros to be represented by 8 bits and flip the data
     x = flip_data(fill_zero_bytes(compress_data))
     return x
 
@@ -173,9 +190,10 @@ def fill_zero_hexa(hexa_data, binary_data_len):
     :param hexa_data:
     :return: binary_data_len
     """
-    while len(hexa_data[2:]) < binary_data_len/4:
+    while len(hexa_data[2:]) < binary_data_len / 4:
         hexa_data = '0x0' + hexa_data[2:]
     return hexa_data
+
 
 def update_code_size1(table_size, code_size):
     """
@@ -188,6 +206,7 @@ def update_code_size1(table_size, code_size):
     if table_size == int(math.pow(2, code_size)):
         return code_size + 1
     return code_size
+
 
 def decode(compressed_data, color_table_size):
     """
@@ -249,11 +268,15 @@ def decode(compressed_data, color_table_size):
 
     return decompressed_data
 
-if __name__ == '__main__':
-    import io
 
-    # Open the file in binary mod
+if __name__ == '__main__':
+
+    # Open the file in binary mode -  after the data compressed
     input_bytes = '0x24929248924A492249292489200092248002492400049490001252491249492449252491249'
     print("0x{:x}".format(int(encode(input_bytes, 4), 2)))
 
-    print(decode(bytes('0x8c2d99872a1cdc33a00275ec95faa8de608c04914c01','utf-8'), 4))
+    # the output will be the indexes of the colors in color table in this example the index's length will be 3
+    # therefore, we expect to see:"001 001 001 001 001 010 010 010 ..." equivalent to 1,1,1,1,1,2,2,2..
+    print(decode(bytes('0x8c2d99872a1cdc33a00275ec95faa8de608c04914c01', 'utf-8'), 4))
+
+
